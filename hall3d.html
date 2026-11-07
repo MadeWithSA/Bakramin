@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bakramin 3D · Luxury Cinema — Interactive 3D</title>
+<style>
+  *{box-sizing:border-box} html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#08090b;color:#eee;font-family:Inter,Arial,sans-serif}
+  #view{position:fixed;inset:0} canvas{display:block}
+  .panel{position:fixed;z-index:5;background:rgba(10,12,15,.78);border:1px solid rgba(226,190,125,.25);backdrop-filter:blur(14px);box-shadow:0 12px 40px #0008}
+  #brand{top:18px;left:18px;padding:13px 17px;border-radius:13px}
+  #brand strong{display:block;font-size:13px;letter-spacing:2.5px;color:#e8c58e}
+  #brand span{font-size:11px;color:#a9a9a9}
+  #controls{top:18px;right:18px;padding:10px;border-radius:14px;display:flex;gap:7px;flex-wrap:wrap;max-width: min(550px, calc(100vw - 36px));justify-content:flex-end}
+  button{border:1px solid #6f5838;background:#211d18;color:#f3dfbf;border-radius:9px;padding:10px 13px;font-size:12px;cursor:pointer;transition:.2s}
+  button:hover,button.active{background:#8c693c;color:white;border-color:#d5ad70}
+  #hint{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);padding:10px 15px;border-radius:12px;font-size:11px;color:#c9c4bb;white-space:nowrap;max-width:calc(100vw - 24px);text-align:center}
+  #seat{position:fixed;left:50%;bottom:66px;transform:translateX(-50%);padding:10px 18px;border-radius:12px;font-size:13px;color:#f3dfbf;letter-spacing:.5px;display:flex;align-items:center;gap:14px}
+  #seat button.go{background:#d4af37;color:#0a0a0a;border:0;font-weight:700;padding:9px 16px;border-radius:9px}#seat button.go:disabled{opacity:.4;cursor:not-allowed}
+  #seat b{color:#e8c58e}
+  canvas{cursor:default}
+  #ref{position:fixed;right:18px;bottom:18px;width:180px;border-radius:10px;overflow:hidden;opacity:.82;transition:.2s}
+  #ref img{width:100%;display:block}
+  #ref small{display:block;padding:6px 9px;background:#111;color:#c7b28f;font-size:10px}
+  #loading{position:fixed;inset:0;display:grid;place-items:center;background:#08090b;z-index:10;color:#d8b77d;letter-spacing:3px;font-size:13px;transition:opacity .6s}
+  @media(max-width:650px){#ref{display:none}#brand{top:10px;left:10px}#controls{top:78px;left:10px;right:10px;justify-content:flex-start}button{padding:8px 10px}#hint{bottom:10px;font-size:10px}}
+</style>
+</head>
+<body>
+<div id="view"></div>
+<div id="loading">ЗАГРУЗКА 3D-КИНОТЕАТРА…</div>
+<a id="brand" class="panel" style="text-decoration:none"></a>
+<div id="controls" class="panel">
+  <button id="lightsOn" class="active">Свет включён</button><button id="lightsOff">Свет выключен</button>
+</div>
+<div id="hint" class="panel"></div>
+<div id="seat" class="panel"></div>
+
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+
+const host=document.getElementById('view');
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0x090a0c); scene.fog=new THREE.Fog(0x090a0c,24,48);
+const camera=new THREE.PerspectiveCamera(48,innerWidth/innerHeight,.05,100);
+camera.position.set(9,3.9,6.2);
+const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
+renderer.setSize(innerWidth,innerHeight); renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.55;
+renderer.outputColorSpace=THREE.SRGBColorSpace; host.appendChild(renderer.domElement);
+
+const mat=(color,rough=.7,metal=0)=>new THREE.MeshStandardMaterial({color,roughness:rough,metalness:metal});
+const black=mat(0x090a0b,.82), wall=mat(0x151619,.88), floorMat=mat(0x292725,.92), carpet=mat(0x383431,1), gold=mat(0xb48a50,.35,.55), wood=mat(0x55351f,.42), woodLight=mat(0x8c6338,.35), leather=mat(0x202426,.34), leatherSide=mat(0x292d2f,.42), seam=mat(0x34393b,.48), metal=mat(0x343638,.28,.8);
+const warm=new THREE.Color(0xffd79a);
+function box(w,h,d,material,x,y,z,opts={}){const g=new THREE.BoxGeometry(w,h,d);const m=new THREE.Mesh(g,material);m.position.set(x,y,z);m.castShadow=opts.shadow!==false;m.receiveShadow=true;scene.add(m);return m}
+function cyl(r1,r2,h,material,x,y,z,segments=20){const m=new THREE.Mesh(new THREE.CylinderGeometry(r1,r2,h,segments),material);m.position.set(x,y,z);m.castShadow=true;scene.add(m);return m}
+function light(x,y,z,intensity,distance,color=0xffd49a,angle=Math.PI/3){const l=new THREE.SpotLight(color,intensity,distance,angle,.55,1.5);l.position.set(x,y,z);l.target.position.set(x,0,z-2);scene.add(l,l.target);l.castShadow=true;l.shadow.mapSize.set(1024,1024);return l}
+const aisleStrips=[];
+function strip(x,y,z,w,rot=0){
+  const glowMat=new THREE.MeshBasicMaterial({color:0xffcf88});
+  const m=new THREE.Mesh(new THREE.BoxGeometry(w,.035,.055),glowMat);
+  m.position.set(x,y,z);m.rotation.y=rot;scene.add(m);aisleStrips.push(glowMat);
+}
+// Room shell
+box(22,.35,20.525,floorMat,0,-.22,-2.7375);
+box(22,.35,20.525,black,0,8.2,-2.7375);
+// Continuous side walls: close the unwanted opening on the right-hand side.
+for(const side of [-1,1]){
+  box(.35,8.4,20.525,wall,side*11,4,-2.7375);
+}
+box(22,8.4,.35,wall,0,4,-13);
+box(22,8.4,.35,wall,0,4,7.35); // rear wall, right behind the stairs
+// Finished rear wall: continuous dark acoustic backing, framed panels and warm wall lights
+box(21.2,7.2,.12,mat(0x101214,.9),0,4.35,7.23,{shadow:false});
+for(let x=-9.6;x<=9.6;x+=2.4){
+  if(Math.abs(x)>8.5)continue; // doors stand here
+  box(1.55,4.9,.10,mat(0x1c2023,.88),x,4.25,7.13);
+  box(1.62,.075,.14,woodLight,x,6.76,7.09);
+  box(1.62,.075,.14,wood,x,1.74,7.09);
+  box(.045,4.85,.12,mat(0x34302a),x-.83,4.25,7.08);
+}
+for(const x of [-7.2,-2.4,2.4,7.2]){
+  box(.28,1.0,.16,woodLight,x,5.95,6.98);
+  const rearGlow=new THREE.PointLight(0xffc77d,.9,4);
+  rearGlow.position.set(x,5.9,6.45);scene.add(rearGlow);
+}
+// Two entrance doors: raised to the top of each staircase, centered on the stairs, standing on the landing.
+const rearDoorWood=mat(0x49301e,.4), rearDoorInset=mat(0x241b14,.5), rearDoorBrass=mat(0xb58a52,.32,.5);
+const doorBase=2.385;            // top surface of the stair landing
+const dY=doorBase+1.475;         // centre height of the door leaf (door height 2.95)
+for(const x of [-9,9]){
+  const z=7.08;
+  box(2.05,2.95,.16,rearDoorBrass,x,dY,z);
+  box(1.82,2.72,.19,rearDoorWood,x,dY,z-.015);
+  box(1.20,1.95,.035,rearDoorInset,x,dY+.05,z-.12);
+  box(1.30,.055,.045,rearDoorBrass,x,dY+1.05,z-.15);
+  box(1.30,.055,.045,rearDoorBrass,x,dY-.95,z-.15);
+  box(.045,.42,.07,rearDoorBrass,x+.62,dY-.04,z-.17);
+  box(.34,.12,.12,woodLight,x,dY+1.6,z-.08);
+  // warm light above each door
+  const dl=new THREE.PointLight(0xffc77d,.8,4);dl.position.set(x,dY+1.9,z-.8);scene.add(dl);
+}
+// acoustic wall panels at side and rear
+for(let z=-8;z<7;z+=2.1){box(.09,2.5,.12,mat(0x242629),-10.78,3.1,z);box(.09,2.5,.12,mat(0x242629),10.78,3.1,z)}
+for(let x=-9.5;x<=9.5;x+=2.4){if(Math.abs(Math.abs(x)-9)>1.4){box(1.15,1.65,.12,mat(0x202225),x,4.1,7.30);box(1.15,.08,.16,gold,x,5.0,7.21)}}
+// Screen wall and cinema screen at front
+box(12,5.5,.22,black,0,4,-12.72);
+const screenMat=new THREE.MeshStandardMaterial({color:0x252b31,roughness:.38,emissive:0x101820,emissiveIntensity:.4});
+box(13,.13,.18,gold,0,6.35,-12.48);box(13,.13,.18,gold,0,1.55,-12.48);
+box(.13,4.8,.18,gold,-6.5,3.95,-12.48);box(.13,4.8,.18,gold,6.5,3.95,-12.48);
+box(12.75,4.65,.08,screenMat,0,3.95,-12.55,{shadow:false});
+// subtle screen image gradients via layered light panels
+const screenGlow=new THREE.PointLight(0x9db9d4,2.2,10);screenGlow.position.set(0,4,-10.5);scene.add(screenGlow);
+// Ceiling coves and warm wall washers
+for(let x=-9;x<=9;x+=3){box(.055,.055,16,gold,x,7.85,-1);const p=new THREE.PointLight(0xffd49a,2.6,10);p.position.set(x,7.3,5);scene.add(p)}
+for(let x=-8;x<=8;x+=2.7){const p=new THREE.PointLight(0xffd39a,2.7,8);p.position.set(x,6.6,-8);scene.add(p)}
+// ceiling downlights
+for(const [x,z] of [[-7,-4],[-2,-5],[3,-4],[8,-2],[-7,5],[0,5],[7,6]]){cyl(.11,.11,.035,metal,x,7.95,z);const p=new THREE.SpotLight(0xfff0df,3.5,14,.58,.55,1.1);p.position.set(x,7.7,z);p.target.position.set(x,0,z);scene.add(p,p.target)}
+// stepped seating platforms, four tiers
+const rowZ=[5.6,2.5,-.6,-3.7]; const rowY=[1.55,1.15,.75,.35];
+for(let i=0;i<4;i++){
+  const z=rowZ[i],y=rowY[i];
+  box(17,.45,3.05,mat(0x242321),0,y-.22,z);
+  box(16.8,.08,2.9,carpet,0,y+.02,z);
+  // illuminated front riser: every row is visibly higher than the row before it
+  if(i<3){
+    const edgeZ=z-1.525;
+    const nextTop=rowY[i+1]+.005;
+    const thisTop=y+.005;
+    const rise=thisTop-nextTop;
+    if(rise>0){
+      box(16.9,rise, .10, mat(0x302820),0,(thisTop+nextTop)/2,edgeZ);
+      box(16.8,.035,.12,gold,0,thisTop-.015,edgeZ-.015);
+    }
+  }
+}
+
+// Matching staircases on BOTH sides, with straight continuous handrails following the stair slope
+function connectRail(a,b,radius,material){
+  const start=new THREE.Vector3(...a), end=new THREE.Vector3(...b);
+  const delta=new THREE.Vector3().subVectors(end,start);
+  const mesh=new THREE.Mesh(new THREE.CylinderGeometry(radius,radius,delta.length(),12),material);
+  mesh.position.copy(start).add(end).multiplyScalar(.5);
+  mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),delta.normalize());
+  mesh.castShadow=true;mesh.receiveShadow=true;scene.add(mesh);
+}
+const railMetal=mat(0x25282a,.28,.72), railTop=mat(0x8a673d,.32,.42);
+for(const side of [-1,1]){
+  for(let i=0;i<12;i++){
+    const z=-5.8+i*1.02, y=.18+i*.19;
+    box(2.25,.23,1.02,mat(0x242321),side*9.0,y,z);
+    // solid body under the step (no void), reaching down to the floor
+    const under=y-.115+.045;
+    box(2.25,under,1.02,mat(0x1a1918),side*9.0,(y-.115-.045)/2,z);
+    // filler between the stairs and the side wall, stepped the same way
+    box(.70,y+.115+.045,1.02,mat(0x1a1918),side*10.475,(y+.115-.045)/2,z);
+    box(2.25,.035,.055,gold,side*9.0,y+.14,z-.47);
+    strip(side*9.0,y+.16,z-.46,1.8);
+  }
+  // top landing: continues the last step all the way to the rear wall, solid down to the floor
+  box(2.25,2.27+.115,1.245,mat(0x242321),side*9.0,(2.27+.115)/2,5.93+.6225);
+  box(.70,2.27+.115+.045,1.245,mat(0x1a1918),side*10.475,(2.27+.115-.045)/2,5.93+.6225);
+  // rails run along the landing all the way to the door wall: from the seats there is no way to the doors except the stairs
+  for(const offset of [-.96,.96]){
+    const rx=side*(9.0+offset), top=2.385+.9;
+    connectRail([rx,top,5.42],[rx,top,7.17],.065,railTop);
+    for(const pz of [6.05,6.65,7.12]){
+      const post=new THREE.Mesh(new THREE.CylinderGeometry(.035,.045,.9,12),railMetal);
+      post.position.set(rx,2.385+.45,pz);post.castShadow=true;scene.add(post);
+    }
+  }
+  box(2.25,.035,.055,gold,side*9.0,2.27+.14,5.93);
+  for(const offset of [-.96,.96]){
+    const x=side*(9.0+offset);
+    // short evenly spaced posts, all attached to the rail and kept inside stair width
+    for(let i=0;i<12;i++){
+      const z=-5.8+i*1.02, y=.18+i*.19+.23;
+      const post=new THREE.Mesh(new THREE.CylinderGeometry(.035,.045,.78,12),railMetal);
+      post.position.set(x,y+.39,z);post.castShadow=true;scene.add(post);
+    }
+    // one straight sloped top rail, split into aligned spans to follow the stair pitch
+    for(let i=0;i<11;i++){
+      const z0=-5.8+i*1.02, z1=-5.8+(i+1)*1.02;
+      const y0=.18+i*.19+.23+.78, y1=.18+(i+1)*.19+.23+.78;
+      connectRail([x,y0,z0],[x,y1,z1],.065,railTop);
+    }
+    // tidy end caps; no rail extensions beyond first/last stair
+    for(const i of [0,11]){
+      const z=-5.8+i*1.02, y=.18+i*.19+.23+.78;
+      cyl(.075,.075,.07,railTop,x,y,z,16);
+    }
+  }
+}
+// armchair builder: luxurious recliner with padded segmented details
+function chair(cx,baseY,z){
+  // broad pedestal and seat
+  box(1.55,.26,1.62,black,cx,baseY+.24,z);
+  box(1.30,.48,.98,leather,cx,baseY+.60,z+.17);
+  // seat front roll and cushion seams
+  box(1.24,.12,.22,leatherSide,cx,baseY+.83,z-.32);
+  box(1.18,.035,.025,seam,cx,baseY+.85,z+.05,{shadow:false});
+  // back cushion reclined slightly
+  const back=box(1.30,1.24,.34,leather,cx,baseY+1.23,z+.69);back.rotation.x=-.12;
+  box(1.12,.08,.035,seam,cx,baseY+1.38,z+.49,{shadow:false});
+  // headrest
+  box(.72,.34,.27,leatherSide,cx,baseY+1.82,z+.78);
+  // padded arms
+  for(const s of [-1,1]){
+    box(.25,.62,1.23,leatherSide,cx+s*.78,baseY+.75,z+.12);
+    box(.29,.14,1.18,leather,cx+s*.78,baseY+1.08,z+.12);
+    // golden metal cup holder
+    cyl(.105,.105,.035,gold,cx+s*.78,baseY+1.16,z-.20,24);
+    cyl(.073,.073,.025,black,cx+s*.78,baseY+1.18,z-.20,24);
+  }
+  // subtle stitched vertical seams on back
+  for(const s of [-.36,0,.36])box(.018,.72,.018,seam,cx+s,baseY+1.27,z+.505,{shadow:false});
+  // footrest block
+  box(1.03,.22,.48,leatherSide,cx,baseY+.31,z-.78);
+  box(.96,.06,.36,leather,cx,baseY+.45,z-.78);
+}
+const seats=[];
+for(let r=0;r<4;r++){
+  const count=r===0?6:7, spacing=2.05, start=-(count-1)*spacing/2;
+  for(let j=0;j<count;j++){
+    const x=start+j*spacing;
+    const n0=scene.children.length;
+    chair(x,rowY[r],rowZ[r]-.02);
+    const id=seats.length;
+    seats.push({id,row:4-r,num:j+1,cx:x,y:rowY[r],z:rowZ[r]-.02});
+    for(let k=n0;k<scene.children.length;k++){const o=scene.children[k];if(o.isMesh)o.userData.seatId=id}
+  }
+}
+// floor aisle carpet runners
+box(1.25,.025,17,mat(0x181716),-9.0,.02,1);
+box(1.1,.025,17,mat(0x181716),9.0,.02,1);
+// small wall sconces
+for(const z of [-8,-3,2,6.3]){box(.13,.8,.35,woodLight,-10.65,3.3,z);const p=new THREE.PointLight(0xffc779,1.7,6);p.position.set(-10.2,3.4,z);scene.add(p)}
+// soft warm fill lights along both side aisles for clear visibility
+for(const side of [-1,1]){
+  for(const z of [-5,0,5]){
+    const fill=new THREE.PointLight(0xffd8ae,1.35,9);
+    fill.position.set(side*8.7,3.2,z);
+    scene.add(fill);
+  }
+}
+// warm low ambient lighting
+scene.add(new THREE.HemisphereLight(0xb8c5d8,0x493729,1.15));
+const amb=new THREE.AmbientLight(0xffffff,.95);scene.add(amb);
+const key=new THREE.DirectionalLight(0xffe8d0,2.7);key.position.set(-5,10,8);key.castShadow=true;key.shadow.mapSize.set(2048,2048);key.shadow.camera.left=-18;key.shadow.camera.right=18;key.shadow.camera.top=18;key.shadow.camera.bottom=-18;scene.add(key);
+// floating subtle dust specks
+const dustGeo=new THREE.BufferGeometry(), dust=[];for(let i=0;i<450;i++)dust.push((Math.random()-.5)*19,Math.random()*7,Math.random()*20.5-13);
+dustGeo.setAttribute('position',new THREE.Float32BufferAttribute(dust,3));const dustMat=new THREE.PointsMaterial({color:0xb99b6e,size:.018,transparent:true,opacity:.24});scene.add(new THREE.Points(dustGeo,dustMat));
+
+let dim=false,walking=true;
+const btn=(id,fn)=>document.getElementById(id).addEventListener('click',fn);
+function active(id){document.querySelectorAll('button').forEach(b=>b.classList.toggle('active',b.id===id))}
+// ---- first-person camera: the camera IS the walking person (eye height 1.62 m)
+let yaw=0,pitch=-.18,looking=false,lastX=0,lastY=0;
+const EYE=1.62, R=.3;
+camera.rotation.order='YXZ';
+const dom=renderer.domElement;
+dom.addEventListener('contextmenu',e=>e.preventDefault());
+dom.addEventListener('pointerdown',e=>{
+  if(e.button===2){looking=true;lastX=e.clientX;lastY=e.clientY;dom.setPointerCapture(e.pointerId);dom.style.cursor='grabbing'}
+  else if(e.button===0){pickSeat(e)}
+});
+dom.addEventListener('pointermove',e=>{
+  if(!looking)return;
+  yaw-=(e.clientX-lastX)*.0032;pitch-=(e.clientY-lastY)*.0032;lastX=e.clientX;lastY=e.clientY;
+  pitch=THREE.MathUtils.clamp(pitch,-1.25,1.15);
+});
+const stopLook=()=>{looking=false;dom.style.cursor=''};
+dom.addEventListener('pointerup',e=>{if(e.button===2)stopLook()});
+dom.addEventListener('pointercancel',stopLook);
+addEventListener('blur',()=>{for(const k in keys)keys[k]=false;stopLook()});
+// ---- seat picking: left click toggles a seat; selection is shared with the Bakramin booking pages
+const LNG=['ru','uz','en'],LI=Math.max(0,LNG.indexOf(localStorage.lang));
+const TX={back:['← К выбору сеанса','← Back to the session','← Seansga qaytish'],hint:['W A S D — ходьба · Shift — быстрее · правая кнопка мыши (удерживать) — осмотр · левая кнопка — выбрать кресло','W A S D — walk · Shift — faster · hold right mouse button — look · left click — pick a seat','W A S D — yurish · Shift — tezroq · oʻng tugmani bosib turing — qarash · chap tugma — joy tanlash'],
+ none:['Нажмите на свободное кресло','Click a free seat','Boʻsh kreslo ustiga bosing'],row:['Ряд','Row','Qator'],seat:['место','seat','oʻrin'],tot:['Итого','Total','Jami'],cart:['В корзину','To cart','Savatga'],taken:['Это место уже занято','This seat is taken','Bu joy band']};
+const tx=k=>TX[k][LI==1?2:LI==2?1:0];
+LNG; // order in TX: ru, en, uz
+const Q=new URLSearchParams(location.search),MID=+Q.get('id')||1;
+const PK=(()=>{try{return JSON.parse(localStorage.pick)}catch(e){return null}})();
+let TIME=Q.get('time')||(PK&&PK.mid==MID&&PK.time)||'14:30';
+let sel=(PK&&PK.mid==MID&&PK.time==TIME)?PK.seats.slice():[];
+const hashS=x=>{let h=0;for(const c of x)h=(h*31+c.charCodeAt(0))>>>0;return h%100};
+const soldL=()=>{try{return JSON.parse(localStorage.sold)||[]}catch(e){return []}};
+const isBk=id=>hashS(MID+TIME+id)<20||soldL().includes(`${MID}|${TIME}|${id}`);
+const sid=st=>st.row+'-'+st.num;
+const brandEl=document.getElementById('brand');brandEl.href='movie-detail.html?id='+MID+'&time='+TIME;brandEl.innerHTML='<strong>BAKRAMIN 3D</strong><span>'+tx('back')+'</span>';
+document.getElementById('hint').textContent=tx('hint');
+// translucent marker over every seat: red = booked, gold = selected
+const ovs=seats.map(st=>{
+  const g=new THREE.Group();g.position.set(st.cx,st.y+1.05,st.z-.035);g.userData.ov=true;
+  const f=new THREE.Mesh(new THREE.BoxGeometry(1.88,1.88,2.03),new THREE.MeshBasicMaterial({transparent:true,opacity:.2,depthWrite:false}));
+  // thick outline: three nested wireframe boxes so it stays visible against the dark chairs
+  const e=[1.9,1.94,1.98].map(k=>new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(k,k,k+.15)),new THREE.LineBasicMaterial({color:0xffffff})));
+  g.add(f,...e);g.visible=false;scene.add(g);return {g,f,e}});
+function paint(){seats.forEach((st,i)=>{const id=sid(st),o=ovs[i],b=isBk(id),s=sel.includes(id);o.g.visible=b||s;
+  const col=b?0xff2020:0xffe23a;o.f.material.color.set(col);o.f.material.opacity=b?.28:.22;o.e.forEach(l=>l.material.color.set(col))})}
+const seatInfo=document.getElementById('seat'),PRICE=35000;
+const lbl=id=>{const p=id.split('-');return tx('row')+' '+p[0]+' · '+tx('seat')+' '+p[1]};
+function save(){localStorage.pick=JSON.stringify({mid:MID,time:TIME,seats:sel})}
+function refresh(){
+  seatInfo.innerHTML=(sel.length?'<span><b>'+sel.map(lbl).join('; ')+'</b> — '+tx('tot')+' '+(sel.length*PRICE).toLocaleString('ru-RU')+' UZS</span>':'<span>'+tx('none')+'</span>')+'<button class="go" id="tocart" '+(sel.length?'':'disabled')+'>'+tx('cart')+'</button>';
+  document.getElementById('tocart').onclick=()=>{if(!sel.length)return;save();localStorage.cur=JSON.stringify({mid:MID,time:TIME,seats:sel});localStorage.promo='0';location.href='cart.html'};
+}
+const raycaster=new THREE.Raycaster(), mouse=new THREE.Vector2();
+let pickables=null;
+function pickSeat(e){
+  if(!pickables)pickables=scene.children.filter(o=>o.isMesh&&!o.userData.ov);
+  const r=dom.getBoundingClientRect();
+  mouse.set(((e.clientX-r.left)/r.width)*2-1,-((e.clientY-r.top)/r.height)*2+1);
+  raycaster.setFromCamera(mouse,camera);
+  const hit=raycaster.intersectObjects(pickables,false)[0];
+  if(!hit||hit.object.userData.seatId===undefined||hit.distance>16)return;
+  const id=sid(seats[hit.object.userData.seatId]);
+  if(isBk(id)){seatInfo.firstChild.textContent=tx('taken');return}
+  sel=sel.includes(id)?sel.filter(x=>x!==id):[...sel,id];save();paint();refresh();
+}
+paint();refresh();
+function spawn(){
+  // start on the landing next to the right-hand door, looking down the stairs
+  yaw=0;pitch=-.18;
+  camera.position.set(9,walkFloor(9,6.2)+EYE,6.2);
+  camera.rotation.set(pitch,yaw,0);
+  vel.set(0,0,0);
+}
+// Two stable lighting presets: no cumulative intensity changes when switching.
+const lightPresets=[];
+scene.traverse(o=>{
+  if(o.isLight) lightPresets.push({light:o,base:o.intensity});
+});
+function setRoomLighting(isOn){
+  dim=!isOn;
+  for(const item of lightPresets){
+    const l=item.light, base=item.base;
+    if(l.isAmbientLight) l.intensity=isOn?.95:.10;
+    else if(l.isHemisphereLight) l.intensity=isOn?1.15:.16;
+    else if(l.isDirectionalLight) l.intensity=isOn?2.7:.16;
+    else if(l===screenGlow) l.intensity=isOn?2.2:.75;
+    else l.intensity=isOn?base:Math.max(.025,base*.10);
+  }
+  aisleStrips.forEach(m=>m.color.setHex(isOn?0xffcf88:0x684b2b));
+  active(isOn?'lightsOn':'lightsOff');
+}
+btn('lightsOn',()=>setRoomLighting(true));
+btn('lightsOff',()=>setRoomLighting(false));
+setRoomLighting(true);
+const keys={};const vel=new THREE.Vector3();addEventListener('keydown',e=>{keys[e.code]=true;if(walking && ['KeyW','KeyA','KeyS','KeyD','Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault()});addEventListener('keyup',e=>keys[e.code]=false);
+// Real surface height under the player: stairs, landing, seating tiers, floor
+function walkFloor(x,z){
+  const ax=Math.abs(x);
+  if(ax>8.29 && ax<9.71 && z>=-6.31 && z<=7.2){
+    if(z>5.93)return 2.385;                                  // landing at the door
+    const i=THREE.MathUtils.clamp(Math.floor((z+6.31)/1.02),0,11);
+    return .18+i*.19+.115;                                   // top of step i
+  }
+  if(ax<8.3 && z>-5.225 && z<7.2){
+    if(z>4.05)return rowY[0]+.06;
+    if(z>.95)return rowY[1]+.06;
+    if(z>-2.15)return rowY[2]+.06;
+    return rowY[3]+.06;
+  }
+  return 0;
+}
+// Collision: walls, rails along both staircases, and every armchair
+const chairBoxes=[];
+for(let r=0;r<4;r++){const count=r===0?6:7,sp=2.05,st=-(count-1)*sp/2;for(let j=0;j<count;j++){const cx=st+j*sp,cz=rowZ[r]-.02;chairBoxes.push([cx-.93,cx+.93,cz-1.03,cz+.96])}}
+function blocked(x,z){
+  const ax=Math.abs(x);
+  if(ax>10.45||z<-12.0||z>6.7)return true;                   // walls and screen
+  if(z>-6.31){
+    if(ax>7.79&&ax<8.29)return true;                         // inner stair rail
+    if(ax>9.71)return true;                                  // outer stair rail / wall
+  }
+  for(const c of chairBoxes){if(x>c[0]-R&&x<c[1]+R&&z>c[2]-R&&z<c[3]+R)return true}
+  return false;
+}
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
+const clock=new THREE.Clock();let walkPhase=0;
+function animate(){
+  requestAnimationFrame(animate);
+  const dt=Math.min(clock.getDelta(),.04);
+  if(walking){
+    const forward=new THREE.Vector3(-Math.sin(yaw),0,-Math.cos(yaw));
+    const right=new THREE.Vector3(Math.cos(yaw),0,-Math.sin(yaw));
+    const wish=new THREE.Vector3();
+    if(keys.KeyW||keys.ArrowUp)wish.add(forward);
+    if(keys.KeyS||keys.ArrowDown)wish.sub(forward);
+    if(keys.KeyD)wish.add(right);
+    if(keys.KeyA)wish.sub(right);
+    if(keys.ArrowRight)yaw-=dt*1.8;
+    if(keys.ArrowLeft)yaw+=dt*1.8;
+    const speed=(keys.ShiftLeft||keys.ShiftRight)?5.2:3.0;
+    if(wish.lengthSq()>0)wish.normalize().multiplyScalar(speed);
+    // smooth acceleration / stopping
+    vel.lerp(wish,1-Math.exp(-dt*12));
+    // move per axis so you slide along rails and chairs instead of sticking
+    const nx=camera.position.x+vel.x*dt, nz=camera.position.z+vel.z*dt;
+    if(!blocked(nx,camera.position.z))camera.position.x=nx;
+    if(!blocked(camera.position.x,nz))camera.position.z=nz;
+    // eye height follows the real surface smoothly (steps feel like steps) + light walking bob
+    const moving=vel.length();
+    walkPhase+=moving*dt*2.6;
+    const bob=Math.sin(walkPhase*3.2)*.028*Math.min(moving/3,1.4);
+    const targetY=walkFloor(camera.position.x,camera.position.z)+EYE+bob;
+    camera.position.y+=(targetY-camera.position.y)*(1-Math.exp(-dt*16));
+    camera.rotation.set(pitch,yaw,0);
+  }
+  renderer.render(scene,camera);
+}
+// ---- extra hall details: curtains, speakers, exit signs, ceiling beams, LED edges, seat tags
+const glowG=new THREE.MeshStandardMaterial({color:0x8a6a2a,emissive:0xd4a24a,emissiveIntensity:1.5}),curt=mat(0x4a0e17,.95),glass=new THREE.MeshStandardMaterial({color:0x101c28,roughness:.7,metalness:0,emissive:0x16324a,emissiveIntensity:.45});
+const tex=(text,w,h,fg,bg,font)=>{const c=document.createElement('canvas');c.width=w;c.height=h;const x=c.getContext('2d');if(bg){x.fillStyle=bg;x.fillRect(0,0,w,h)}x.fillStyle=fg;x.font=font;x.textAlign='center';x.textBaseline='middle';x.fillText(text,w/2,h/2);const t=new THREE.CanvasTexture(c);t.anisotropy=4;return t};
+for(const sd of [-1,1]){
+  for(let i=0;i<11;i++)box(.3,5.7,.3+(i%2)*.14,curt,sd*(6.75+i*.29),3.2,-12.35+(i%2)*.04,{shadow:false});   // velvet curtain folds
+  box(3.6,.1,.12,gold,sd*8.25,6.1,-12.2,{shadow:false});
+  box(.55,1.7,.6,black,sd*10.45,3.3,-10.8);box(.5,1.6,.05,mat(0x1d1f22,.9),sd*10.18,3.3,-10.8);                // speaker
+  for(const yy of [3.62,2.95]){const cn=new THREE.Mesh(new THREE.CylinderGeometry(.19,.19,.05,28),gold);cn.rotation.z=Math.PI/2;cn.position.set(sd*10.15,yy,-10.8);scene.add(cn)}
+  box(1.1,.34,.1,mat(0x0b7a36,.5),sd*9,6.1,7.1,{shadow:false});                                                // exit sign
+  const ex=new THREE.Mesh(new THREE.PlaneGeometry(1.0,.28),new THREE.MeshBasicMaterial({map:tex('ВЫХОД · EXIT',256,72,'#eaffea','#0b7a36','700 30px sans-serif')}));ex.rotation.y=Math.PI;ex.position.set(sd*9,6.1,7.04);scene.add(ex);
+}
+for(const zz of [-9,-5,-1,3,6.5]){box(20.4,.22,.35,black,0,7.8,zz,{shadow:false});box(20.2,.04,.06,glowG,0,7.66,zz,{shadow:false})}
+for(let r=0;r<4;r++)box(16.6,.03,.05,glowG,0,rowY[r]+.075,rowZ[r]-1.5,{shadow:false});                       // tier LED edge
+box(2.5,.8,.04,gold,0,7.28,7.15,{shadow:false});box(2.3,.6,.03,glass,0,7.28,7.125,{shadow:false});            // projector window, flush with the wall
+seats.forEach(st=>{const b=isBk(sid(st));const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex(st.row+' · '+st.num,128,64,b?'#ff6a6a':'#f0d27a','rgba(8,8,8,.72)','700 32px sans-serif'),transparent:true,depthWrite:false}));sp.position.set(st.cx,st.y+2.15,st.z+.2);sp.scale.set(.66,.33,1);scene.add(sp)});
+spawn();
+animate();
+setTimeout(()=>{const l=document.getElementById('loading');l.style.opacity=0;setTimeout(()=>l.remove(),700)},900);
+</script>
+</body></html>
