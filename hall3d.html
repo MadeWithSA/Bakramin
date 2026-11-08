@@ -27,6 +27,12 @@
 </style>
 </head>
 <body>
+<script>if(matchMedia('(pointer:coarse)').matches||/Android|iPhone|iPod/i.test(navigator.userAgent)){
+  const L=['ru','uz','en'].indexOf(localStorage.lang),q=new URLSearchParams(location.search),i=Math.max(0,L);
+  const tx=[['3D-зал доступен только на компьютере','Откройте сайт на компьютере, чтобы пройтись по залу и выбрать место.','← К выбору сеанса'],['3D zal faqat kompyuterda mavjud','Zalni aylanib, joy tanlash uchun saytni kompyuterda oching.','← Seansga qaytish'],['The 3D hall is available on desktop only','Open the site on a computer to walk around the hall and pick a seat.','← Back to the session']][i];
+  document.body.innerHTML=`<div style="min-height:100vh;display:grid;place-content:center;gap:14px;text-align:center;padding:24px;background:#050505;color:#f6f0e0;font-family:system-ui,sans-serif"><div style="font-size:48px">🖥</div><h2 style="color:#d4af37">${tx[0]}</h2><p style="color:#a59d88;max-width:320px;margin:auto">${tx[1]}</p><a href="movie-detail.html?id=${q.get('id')||1}&time=${q.get('time')||'14:30'}" style="color:#0a0a0a;background:#d4af37;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:700;justify-self:center">${tx[2]}</a></div>`;
+  window.stop();
+}</script>
 <div id="view"></div>
 <div id="loading">ЗАГРУЗКА 3D-КИНОТЕАТРА…</div>
 <a id="brand" class="panel" style="text-decoration:none"></a>
@@ -41,6 +47,8 @@
 </script>
 <script type="module">
 import * as THREE from 'three';
+import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
+import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
 
 const host=document.getElementById('view');
 const scene=new THREE.Scene(); scene.background=new THREE.Color(0x090a0c); scene.fog=new THREE.Fog(0x090a0c,24,48);
@@ -194,32 +202,40 @@ for(const side of [-1,1]){
     }
   }
 }
-// armchair builder: luxurious recliner with padded segmented details
-function chair(cx,baseY,z){
-  // broad pedestal and seat
-  box(1.55,.26,1.62,black,cx,baseY+.24,z);
-  box(1.30,.48,.98,leather,cx,baseY+.60,z+.17);
-  // seat front roll and cushion seams
-  box(1.24,.12,.22,leatherSide,cx,baseY+.83,z-.32);
-  box(1.18,.035,.025,seam,cx,baseY+.85,z+.05,{shadow:false});
-  // back cushion reclined slightly
-  const back=box(1.30,1.24,.34,leather,cx,baseY+1.23,z+.69);back.rotation.x=-.12;
-  box(1.12,.08,.035,seam,cx,baseY+1.38,z+.49,{shadow:false});
-  // headrest
-  box(.72,.34,.27,leatherSide,cx,baseY+1.82,z+.78);
-  // padded arms
-  for(const s of [-1,1]){
-    box(.25,.62,1.23,leatherSide,cx+s*.78,baseY+.75,z+.12);
-    box(.29,.14,1.18,leather,cx+s*.78,baseY+1.08,z+.12);
-    // golden metal cup holder
-    cyl(.105,.105,.035,gold,cx+s*.78,baseY+1.16,z-.20,24);
-    cyl(.073,.073,.025,black,cx+s*.78,baseY+1.18,z-.20,24);
+// realistic VIP recliner: rounded padded leather, stitched channels, gold hardware, cup holders, LED underglow
+const envTex=new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(),.04).texture;
+const lea=new THREE.MeshPhysicalMaterial({color:0x1f1c1b,roughness:.46,clearcoat:.55,clearcoatRoughness:.32,sheen:.8,sheenRoughness:.5,sheenColor:new THREE.Color(0x6b4a2e),envMap:envTex,envMapIntensity:.55});
+const lea2=lea.clone();lea2.color.set(0x141312);
+const gld=new THREE.MeshStandardMaterial({color:0xc9a25a,roughness:.28,metalness:1,envMap:envTex,envMapIntensity:.9});
+const ledM=new THREE.MeshBasicMaterial({color:0xffb24d}),hole=new THREE.MeshBasicMaterial({color:0x050505});
+const chairMats=[lea,lea2,gld];
+const RG=new Map();
+function rb(w,h,d,r,m,x,y,z,rx=0,sh=true){const k=[w,h,d,r].join();let g=RG.get(k);if(!g){g=new RoundedBoxGeometry(w,h,d,4,r);RG.set(k,g)}const o=new THREE.Mesh(g,m);o.position.set(x,y,z);o.rotation.x=rx;o.castShadow=sh;o.receiveShadow=true;scene.add(o);return o}
+const torusG=new THREE.TorusGeometry(.085,.014,12,28),legG=new THREE.CylinderGeometry(.022,.022,.2,10),pipeG=new THREE.CylinderGeometry(.013,.013,1.02,10),cupG=new THREE.CylinderGeometry(.072,.072,.02,24),ledG=new THREE.BoxGeometry(.018,.018,1.0),ledF=new THREE.BoxGeometry(1.3,.012,.05);
+function chair(cx,y,z){
+  const q=.2,c=Math.cos(q),s=Math.sin(q);
+  // base shell with gold trim
+  rb(1.42,.17,1.46,.06,lea2,cx,y+.14,z-.02,0,false);rb(1.44,.025,1.48,.01,gld,cx,y+.235,z-.02,0,false);
+  // seat cushion with side bolsters and gold piping
+  rb(1.16,.3,1.02,.11,lea,cx,y+.52,z+.1,-.05);
+  for(const sd of [-1,1])rb(.17,.34,.96,.08,lea,cx+sd*.55,y+.6,z+.1,-.05);
+  const pp=new THREE.Mesh(pipeG,gld);pp.rotation.z=Math.PI/2;pp.position.set(cx,y+.66,z-.4);scene.add(pp);
+  // reclined backrest, stitched channels, headrest pillow
+  rb(1.14,1.22,.3,.12,lea,cx,y+1.22,z+.7,q);
+  for(const k of [-.32,0,.32]){const d=.155;rb(.022,.95,.02,.008,lea2,cx+k,y+1.22+d*s,z+.7-d*c,q,false)}
+  rb(.62,.3,.22,.1,lea,cx,y+1.22+.5*c+.14*s,z+.7+.5*s-.14*c,q+.06);
+  // padded armrests with control plate, gold cup holder and LED underglow
+  for(const sd of [-1,1]){const ax=cx+sd*.77;
+    rb(.2,.52,1.12,.07,lea2,ax,y+.66,z+.08,0,false);rb(.27,.11,1.08,.05,lea,ax,y+.96,z+.08);
+    rb(.14,.02,.34,.01,gld,ax,y+1.025,z-.3,0,false);
+    const rg=new THREE.Mesh(torusG,gld);rg.rotation.x=Math.PI/2;rg.position.set(ax,y+1.03,z+.28);scene.add(rg);
+    const ch=new THREE.Mesh(cupG,hole);ch.position.set(ax,y+1.02,z+.28);scene.add(ch);
+    const ld=new THREE.Mesh(ledG,ledM);ld.position.set(cx+sd*.88,y+.4,z+.08);scene.add(ld);
   }
-  // subtle stitched vertical seams on back
-  for(const s of [-.36,0,.36])box(.018,.72,.018,seam,cx+s,baseY+1.27,z+.505,{shadow:false});
-  // footrest block
-  box(1.03,.22,.48,leatherSide,cx,baseY+.31,z-.78);
-  box(.96,.06,.36,leather,cx,baseY+.45,z-.78);
+  // footrest on gold supports + floor LED
+  rb(.9,.15,.5,.06,lea,cx,y+.36,z-.78,-.2);
+  for(const sd of [-1,1]){const lg=new THREE.Mesh(legG,gld);lg.position.set(cx+sd*.3,y+.3,z-.55);scene.add(lg)}
+  const lf=new THREE.Mesh(ledF,ledM);lf.position.set(cx,y+.07,z-1.0);scene.add(lf);
 }
 const seats=[];
 for(let r=0;r<4;r++){
@@ -286,7 +302,7 @@ const Q=new URLSearchParams(location.search),MID=+Q.get('id')||1;
 const PK=(()=>{try{return JSON.parse(localStorage.pick)}catch(e){return null}})();
 let TIME=Q.get('time')||(PK&&PK.mid==MID&&PK.time)||'14:30';
 let sel=(PK&&PK.mid==MID&&PK.time==TIME)?PK.seats.slice():[];
-const hashS=x=>{let h=0;for(const c of x)h=(h*31+c.charCodeAt(0))>>>0;return h%100};
+const hashS=s=>{let h=2166136261;for(const c of s){h^=c.charCodeAt(0);h=Math.imul(h,16777619)}h^=h>>>13;h=Math.imul(h,0x5bd1e995);h^=h>>>15;return (h>>>0)%100};
 const soldL=()=>{try{return JSON.parse(localStorage.sold)||[]}catch(e){return []}};
 const isBk=id=>hashS(MID+TIME+id)<20||soldL().includes(`${MID}|${TIME}|${id}`);
 const sid=st=>st.row+'-'+st.num;
@@ -335,7 +351,7 @@ scene.traverse(o=>{
   if(o.isLight) lightPresets.push({light:o,base:o.intensity});
 });
 function setRoomLighting(isOn){
-  dim=!isOn;
+  dim=!isOn;chairMats.forEach(m=>m.envMapIntensity=isOn?(m===gld?.9:.55):.1);
   for(const item of lightPresets){
     const l=item.light, base=item.base;
     if(l.isAmbientLight) l.intensity=isOn?.95:.10;
