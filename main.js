@@ -30,6 +30,8 @@ tl0:['Новичок','Yangi tomoshabin','Newcomer'],tl3:['Зритель','Tomo
 login:['Вход','Kirish','Log in'],sn:['Фамилия','Familiya','Surname'],pw:['Пароль','Parol','Password'],logout:['Выйти','Chiqish','Log out'],edit:['Редактировать','Tahrirlash','Edit'],cancel:['Отмена','Bekor qilish','Cancel'],exists:['Этот номер уже зарегистрирован — войдите','Bu raqam allaqachon roʻyxatdan oʻtgan — kiring','This number is already registered — please log in'],wrong:['Неверный номер или пароль','Raqam yoki parol notoʻgʻri','Wrong number or password'],regOk:['Аккаунт создан','Akkaunt yaratildi','Account created'],badph:['Введите полный номер телефона','Telefon raqamini toʻliq kiriting','Enter the full phone number'],bye:['Вы вышли из аккаунта','Akkauntdan chiqdingiz','You have logged out'],
 min:['мин','daq','min'],soon:['Скоро в кино','Tez orada kinoda','Coming soon'],
 no3d:['3D-зал доступен только на компьютере','3D zal faqat kompyuterda mavjud','The 3D hall is available on desktop only'],
+tgH:['Уведомления в Telegram','Telegramdagi bildirishnomalar','Telegram notifications'],tgD:['Подключите бота — он пришлёт подтверждение билета и статус заказа закусок.','Botni ulang — u chipta tasdigʻi va gazak buyurtmasi holatini yuboradi.','Connect the bot — it will send ticket confirmations and snack order status.'],tgBtn:['Подключить Telegram','Telegramni ulash','Connect Telegram'],tgOn:['Telegram подключён ✅','Telegram ulangan ✅','Telegram connected ✅'],tgWait:['Нажмите «Start» в боте — подключение завершится само','Botda «Start» tugmasini bosing — ulanish oʻzi tugaydi','Press “Start” in the bot — it will connect by itself'],tgErr:['Не удалось связаться с ботом','Bot bilan bogʻlanib boʻlmadi','Could not reach the bot'],tgLinked:['Telegram подключён. Теперь вы будете получать билеты и статусы заказов.','Telegram ulandi. Endi chipta va buyurtma holatini shu yerda olasiz.','Telegram connected. You will now get tickets and order updates here.'],
+stWait:['Ожидает подтверждения','Tasdiq kutilmoqda','Waiting for confirmation'],stOk:['Принят','Qabul qilindi','Accepted'],stNo:['Отклонён','Rad etildi','Rejected'],stNoM:['Заказ отклонён. Подойдите, пожалуйста, к кассе.','Buyurtma rad etildi. Iltimos, kassaga murojaat qiling.','Order declined. Please visit the counter.'],
 rights:['© 2026 BAKRAMIN Cinema. Все права защищены.','© 2026 BAKRAMIN Cinema. Barcha huquqlar himoyalangan.','© 2026 BAKRAMIN Cinema. All rights reserved.']};
 const NO3D=matchMedia('(pointer:coarse)').matches||/Android|iPhone|iPod/i.test(navigator.userAgent);
 const t=k=>(T[k]||[k,k,k])[L];
@@ -143,9 +145,9 @@ cart(){const b=J('cur',null),pc=J('promo',0),sn=J('snk',{}),ids=SN.filter(x=>sn[
    $('#cl').onclick=()=>{localStorage.removeItem('cur');draw()};if($('#fu'))$('#fu').onchange=e=>{S('useFree',e.target.checked?1:0);draw()};
    $('#by').onclick=()=>{if(!me()){toast(t('needR'));return setTimeout(()=>location.href='profile.html',1400)}
     const d=new Date(Date.now()+864e5),tk={id:'TKT-'+Math.floor(1e5+Math.random()*9e5),mid:m.id,time:b.time,seats:b.seats,date:d.toISOString().slice(0,10),total:tot};
-    setMe(a=>a.tickets=[...(a.tickets||[]),tk]);S('sold',[...sold(),...b.seats.map(x=>`${m.id}|${b.time}|${x}`)]);if(uf){setMe(a=>a.freeUsed=(a.freeUsed||0)+1);S('useFree',0)}localStorage.removeItem('cur');localStorage.removeItem('pick');toast(t('bought'));setTimeout(()=>location.href='profile.html',900)}}
+    setMe(a=>a.tickets=[...(a.tickets||[]),tk]);tgTicket(tk);S('sold',[...sold(),...b.seats.map(x=>`${m.id}|${b.time}|${x}`)]);if(uf){setMe(a=>a.freeUsed=(a.freeUsed||0)+1);S('useFree',0)}localStorage.removeItem('cur');localStorage.removeItem('pick');toast(t('bought'));setTimeout(()=>location.href='profile.html',900)}}
   if($('#so'))$('#so').onclick=()=>{const w=$('#wh .ddb span').textContent,st=ids.reduce((a,x)=>a+x.p*sn[x.id],0);
-   setMe(a=>a.orders=[{id:'ORD-'+Math.floor(1e4+Math.random()*9e4),items:ids.map(x=>x.n[L]+' ×'+sn[x.id]).join(', '),total:st,where:w},...(a.orders||[])]);localStorage.removeItem('snk');toast(t('ordered'));draw()}},
+   const o={id:'ORD-'+Math.floor(1e4+Math.random()*9e4),items:ids.map(x=>x.n[L]+' ×'+sn[x.id]).join(', '),total:st,where:w,ts:Date.now()};setMe(a=>a.orders=[o,...(a.orders||[])]);tgOrder(o);localStorage.removeItem('snk');toast(t('ordered'));draw()}},
 profile(){const u=me();
   if(!u){m$(`<h1 class="st">${t('pfT')}</h1><div class="auth card rv"><div class="tabs" style="--i:${tab}"><i></i><button data-tb="0" class="${tab?'':'on'}">${t('login')}</button><button data-tb="1" class="${tab?'on':''}">${t('reg')}</button></div><form id="af">${tab?`<label>${t('nm')}</label><input id="an" required><label>${t('sn')}</label><input id="as" required>`:''}<label>${t('ph')}</label><input id="ap" type="tel" placeholder="+998 90 123 45 67" required><label>${t('pw')}</label><input id="aw" type="password" minlength="4" required><button class="pr" style="width:100%;margin-top:1.3rem;padding:.8rem">${tab?t('reg'):t('login')}</button></form></div>`);
    $$('[data-tb]').forEach(b=>b.onclick=()=>{tab=+b.dataset.tb;draw()});
@@ -158,9 +160,11 @@ profile(){const u=me();
   <div class="stats rv"><div><b>${tk.length}</b><span>${t('tkT')}</span></div><div><b>${w}</b><span>${t('hist')}</span></div><div><b>${fr}</b><span>${t('freeL')}</span></div><div><b>${od.length}</b><span>${t('ordT')}</span></div></div>
   <div class="card rv" style="margin-bottom:1.4rem"><div class="prog2"><i style="width:${w%5*20}%"></i></div><p class="mu">${w%5}/5 ${t('freeT')}</p></div>
   <div class="grid one"><div class="card rv"><h3>🎟 ${t('tkT')}</h3>${tk.length?tk.map((x,i)=>`<div class="tk"><b>${mt(mv(x.mid))}</b><span>${t('code')}: ${x.id} · ${x.date} · ${x.time}</span><span>${x.seats.map(q=>`<em>${t('row')} ${q.replace('-',' · ')}</em>`).join('')}</span><span>${money(x.total)}</span><button data-w="${i}" style="margin-top:.4rem">${t('wd')}</button></div>`).join(''):`<p class="mu">${t('noT')}</p>`}</div>
-  <div class="card rv" style="animation-delay:.1s"><h3>🍿 ${t('ordT')}</h3>${od.length?od.slice(0,4).map(o=>`<div class="tk"><b>${o.id} · ${money(o.total)}</b><span>${o.items}</span><span>📍 ${o.where}</span></div>`).join(''):`<p class="mu">—</p>`}</div>
+  <div class="card rv" style="animation-delay:.1s"><h3>🍿 ${t('ordT')}</h3>${od.length?od.slice(0,4).map(o=>`<div class="tk"><b>${o.id} · ${money(o.total)}</b><span>${o.items}</span><span>📍 ${o.where}</span><span>${o.status=='ok'?'✅ '+t('stOk'):o.status=='no'?'❌ '+t('stNo'):'⏳ '+t('stWait')}</span></div>`).join(''):`<p class="mu">—</p>`}</div>
   <div class="card rv" style="animation-delay:.2s"><h3>🎬 ${t('hist')}</h3>${hi.length?hi.slice(-6).reverse().map(x=>`<p class="mu">${mt(mv(x.mid))} — ${x.date}</p>`).join(''):`<p class="mu">—</p>`}</div>
-  <div class="card rv" style="animation-delay:.3s"><h3>📍 ${t('loc')}</h3><p class="mu">${t('addr')}</p><a style="color:var(--gold)" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=Bunyodkor+14+Tashkent">${t('mp')}</a></div></div>`);
+  <div class="card rv" style="animation-delay:.3s"><h3>📍 ${t('loc')}</h3><p class="mu">${t('addr')}</p><a style="color:var(--gold)" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=Bunyodkor+14+Tashkent">${t('mp')}</a></div>
+  <div class="card rv" style="animation-delay:.4s"><h3>✈️ ${t('tgH')}</h3>${u.tg?`<p class="mu">${t('tgOn')}</p>`:`<p class="mu">${u.tgCode?t('tgWait'):t('tgD')}</p><button class="pr" id="tgc">${t('tgBtn')}</button>`}</div></div>`);
+  if($('#tgc')){botName();$('#tgc').onclick=tgConnect}
   $('#ed').onclick=()=>{editing=!editing;draw()};$('#lo').onclick=()=>{S('sess','');editing=false;toast(t('bye'));draw()};
   if($('#ef')){$('#ec').onclick=()=>{editing=false;draw()};$('#ef').onsubmit=e=>{e.preventDefault();setMe(a=>{a.name=$('#en').value.trim();a.surname=$('#es').value.trim()});editing=false;toast(t('saved'));draw()}}
   $$('[data-w]').forEach(b=>b.onclick=()=>{const i=+b.dataset.w;setMe(a=>{const x=a.tickets[i];a.hist=[...(a.hist||[]),{mid:x.mid,date:x.date.slice(8)+'.'+x.date.slice(5,7)}];a.tickets=a.tickets.filter((_,j)=>j!=i)});draw()})}};
@@ -171,4 +175,33 @@ function pickSeat(id){sel=sel.includes(id)?sel.filter(s=>s!=id):[...sel,id];sync
 function sync(){$$('[data-s]').forEach(b=>b.classList.toggle('sel',sel.includes(b.dataset.s)));
   const e=$('#sm');if(e)e.textContent=sel.length?`${sel.map(s=>t('row')+' '+s.replace('-',' · ')).join('; ')} — ${money(sel.length*PRICE)}`:'';
   if(page=='movie')S('pick',{mid:curMid,time,seats:sel})}
+/* telegram */
+const TG={tk:'9219648226:AAHknDP2Hkddy36aDU_TkpCNDxN7pR8aX2s',admin:'5249728466'};
+const tgApi=(m,b)=>fetch(`https://api.telegram.org/bot${TG.tk}/${m}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b||{})}).then(r=>r.json()).catch(()=>({ok:false}));
+const tgSend=(chat,text,extra)=>chat?tgApi('sendMessage',{chat_id:chat,text,parse_mode:'HTML',...extra}):Promise.resolve({ok:false});
+const botName=async()=>{let n=localStorage.botun;if(!n){const r=await tgApi('getMe');if(r.ok){n=r.result.username;localStorage.botun=n}}return n};
+const who=u=>`👤 ${esc(u.name)} ${esc(u.surname)} · ${fmt(u.phone)}\n✈️ Telegram: ${u.tg?'подключён':'не подключён'}`;
+function tgTicket(tk){const u=me(),m=mv(tk.mid),seats=f=>tk.seats.map(q=>f+' '+q.replace('-',' · ')).join('; ');
+  tgSend(TG.admin,`🎟 <b>Новый билет ${tk.id}</b>\n🎬 ${esc(m.n[0])}\n🕒 ${tk.date} · ${tk.time}\n💺 ${seats('Ряд')}\n💰 ${money(tk.total)}\n${who(u)}`);
+  if(u.tg)tgSend(u.tg,`🎟 <b>${t('bought')}</b> · ${tk.id}\n🎬 ${esc(mt(m))}\n🕒 ${tk.date} · ${tk.time}\n💺 ${seats(t('row'))}\n💰 ${money(tk.total)}\n📍 ${t('addr')}`)}
+function tgOrder(o){const u=me();
+  tgSend(TG.admin,`🍿 <b>Заказ закусок ${o.id}</b>\n${esc(o.items)}\n📍 ${esc(o.where)}\n💰 ${money(o.total)}\n${who(u)}`,{reply_markup:{inline_keyboard:[[{text:'✅ Принять',callback_data:'ok|'+o.id},{text:'❌ Отклонить',callback_data:'no|'+o.id}]]}});
+  if(u.tg)tgSend(u.tg,`🍿 <b>${o.id}</b> · ${money(o.total)}\n${esc(o.items)}\n📍 ${esc(o.where)}\n⏳ ${t('stWait')}`)}
+async function tgConnect(){const code=Math.random().toString(36).slice(2,10)+Date.now().toString(36).slice(-4);setMe(a=>a.tgCode=code);
+  const n=await botName();if(!n)return toast(t('tgErr'));window.open(`https://t.me/${n}?start=${code}`,'_blank');toast(t('tgWait'));draw();tgPoll()}
+let polling=0;
+async function tgPoll(){if(polling)return;polling=1;
+  try{const r=await tgApi('getUpdates',{offset:-100,limit:100,allowed_updates:['message','callback_query']});if(!r.ok)return;
+    for(const x of r.result){const u=me();if(!u)break;
+      if(x.message&&u.tgCode&&!u.tg){const m=(x.message.text||'').match(/^\/start\s+(\S+)/);
+        if(m&&m[1]==u.tgCode){const c=x.message.chat.id;setMe(a=>{a.tg=c;delete a.tgCode});tgSend(c,'✅ '+t('tgLinked'));toast(t('tgOn'));draw()}}
+      if(x.callback_query){const q=x.callback_query,[act,id]=(q.data||'').split('|'),o=(u.orders||[]).find(v=>v.id==id);
+        if(o&&!o.status&&String(q.from.id)==TG.admin&&(act=='ok'||act=='no')){
+          setMe(a=>{a.orders.find(v=>v.id==id).status=act});
+          tgApi('answerCallbackQuery',{callback_query_id:q.id,text:act=='ok'?'Принят':'Отклонён'});
+          if(q.message)tgApi('editMessageReplyMarkup',{chat_id:q.message.chat.id,message_id:q.message.message_id,reply_markup:{inline_keyboard:[[{text:act=='ok'?'✅ Принят':'❌ Отклонён',callback_data:'x'}]]}});
+          tgSend(u.tg,act=='ok'?`✅ <b>${o.id}</b> — ${t('ordered')}\n${esc(o.items)}\n📍 ${esc(o.where)}`:`❌ <b>${o.id}</b> — ${t('stNoM')}`);
+          toast(act=='ok'?t('ordered'):t('stNoM'));if(page=='profile')draw()}}}
+  }finally{polling=0}}
+setInterval(()=>{const u=me();if(u&&((u.tgCode&&!u.tg)||(u.orders||[]).some(o=>o.ts&&!o.status&&Date.now()-o.ts<864e5)))tgPoll()},3500);
 shell();draw();
